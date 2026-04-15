@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Student Management CRUD</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 1.75rem;
+      }
+
+      .card {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(17, 24, 39, 0.06);
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .field.full {
+        grid-column: span 2;
+      }
+
+      label {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      input,
+      select,
+      button {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+      }
+
+      button {
+        cursor: pointer;
+        border: none;
+        font-weight: 600;
+      }
+
+      .btn-primary {
+        background: #2563eb;
+        color: #ffffff;
+      }
+
+      .btn-secondary {
+        background: #4b5563;
+        color: #ffffff;
+      }
+
+      .btn-danger {
+        background: #dc2626;
+        color: #ffffff;
+      }
+
+      .btn-warning {
+        background: #d97706;
+        color: #ffffff;
+      }
+
+      .toolbar {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .alert {
+        margin: 16px 0;
+        padding: 12px;
+        border-radius: 8px;
+        display: none;
+      }
+
+      .alert.success {
+        display: block;
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #86efac;
+      }
+
+      .alert.error {
+        display: block;
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+      }
+
+      .table-wrap {
+        margin-top: 16px;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 10px;
+        text-align: left;
+        font-size: 0.9rem;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f9fafb;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 700px) {
+        form {
+          grid-template-columns: 1fr;
+        }
+
+        .field.full {
+          grid-column: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Student Management</h1>
+
+      <div id="alert" class="alert"></div>
+
+      <div class="card">
+        <form id="studentForm">
+          <div class="field">
+            <label for="name">Name</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+
+          <div class="field">
+            <label for="grade">Grade</label>
+            <input id="grade" name="grade" type="number" min="0" max="100" />
+          </div>
+
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </div>
+
+          <div class="field full toolbar">
+            <button type="submit" class="btn-primary">Save Student</button>
+            <button type="button" id="cancelEditBtn" class="btn-secondary">Cancel Edit</button>
+            <button type="button" id="refreshBtn" class="btn-secondary">Refresh</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="table-wrap card">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Grade</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="studentsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = 'http://localhost:3000/students';
+
+      const form = document.getElementById('studentForm');
+      const alertEl = document.getElementById('alert');
+      const studentsBody = document.getElementById('studentsBody');
+      const cancelEditBtn = document.getElementById('cancelEditBtn');
+      const refreshBtn = document.getElementById('refreshBtn');
+
+      let editingId = null;
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function showAlert(message, type = 'success') {
+        alertEl.className = `alert ${type}`;
+        alertEl.textContent = message;
+        setTimeout(() => {
+          alertEl.className = 'alert';
+          alertEl.textContent = '';
+        }, 2500);
+      }
+
+      function resetForm() {
+        form.reset();
+        form.status.value = 'active';
+        editingId = null;
+      }
+
+      function getFormData() {
+        return {
+          name: form.name.value.trim(),
+          email: form.email.value.trim(),
+          grade: form.grade.value === '' ? null : Number(form.grade.value),
+          status: form.status.value,
+        };
+      }
+
+      async function fetchStudents() {
+        try {
+          const response = await fetch(API_URL);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch students (${response.status})`);
+          }
+          const students = await response.json();
+          renderStudents(students);
+        } catch (error) {
+          showAlert(error.message, 'error');
+        }
+      }
+
+      function renderStudents(students) {
+        if (!Array.isArray(students) || students.length === 0) {
+          studentsBody.innerHTML = '<tr><td colspan="6">No students found.</td></tr>';
+          return;
+        }
+
+        studentsBody.innerHTML = students
+          .map(
+            (student) => `
+              <tr>
+                <td>${escapeHtml(student.id)}</td>
+                <td>${escapeHtml(student.name)}</td>
+                <td>${escapeHtml(student.email)}</td>
+                <td>${escapeHtml(student.grade ?? '')}</td>
+                <td>${escapeHtml(student.status ?? '')}</td>
+                <td>
+                  <div class="actions">
+                    <button class="btn-warning" data-action="edit" data-id="${escapeHtml(student.id)}">Edit</button>
+                    <button class="btn-danger" data-action="delete" data-id="${escapeHtml(student.id)}">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `,
+          )
+          .join('');
+      }
+
+      async function createStudent(payload) {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to create student (${response.status})`);
+        }
+
+        return response.json();
+      }
+
+      async function updateStudent(id, payload) {
+        const response = await fetch(`${API_URL}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update student (${response.status})`);
+        }
+
+        return response.json();
+      }
+
+      async function deleteStudent(id) {
+        const response = await fetch(`${API_URL}/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to delete student (${response.status})`);
+        }
+
+        return response.json();
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = getFormData();
+
+        try {
+          if (editingId) {
+            await updateStudent(editingId, payload);
+            showAlert('Student updated successfully.', 'success');
+          } else {
+            await createStudent(payload);
+            showAlert('Student created successfully.', 'success');
+          }
+
+          resetForm();
+          await fetchStudents();
+        } catch (error) {
+          showAlert(error.message, 'error');
+        }
+      });
+
+      studentsBody.addEventListener('click', async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        const action = target.getAttribute('data-action');
+        const id = target.getAttribute('data-id');
+        if (!action || !id) return;
+
+        try {
+          if (action === 'delete') {
+            await deleteStudent(id);
+            showAlert('Student deleted successfully.', 'success');
+            if (String(editingId) === String(id)) {
+              resetForm();
+            }
+            await fetchStudents();
+            return;
+          }
+
+          if (action === 'edit') {
+            const row = target.closest('tr');
+            if (!row) return;
+
+            const [idCell, nameCell, emailCell, gradeCell, statusCell] = row.querySelectorAll('td');
+            editingId = Number(idCell.textContent);
+            form.name.value = nameCell.textContent || '';
+            form.email.value = emailCell.textContent || '';
+            form.grade.value = gradeCell.textContent || '';
+            form.status.value = statusCell.textContent || 'active';
+            showAlert(`Editing student #${id}`, 'success');
+          }
+        } catch (error) {
+          showAlert(error.message, 'error');
+        }
+      });
+
+      cancelEditBtn.addEventListener('click', () => {
+        resetForm();
+        showAlert('Edit cancelled.', 'success');
+      });
+
+      refreshBtn.addEventListener('click', () => {
+        fetchStudents();
+      });
+
+      fetchStudents();
+    </script>
+  </body>
+</html>
